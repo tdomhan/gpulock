@@ -14,6 +14,19 @@ import traceback
 
 _dev_prefix = '/dev/nvidia'
 
+class GPULock(object):
+    def __enter__(self):
+        self.device_id = obtain_lock_id()
+        if self.device_id < 0:
+            raise RuntimeError("Now GPU available!")
+        print "locked GPU %d" % self.device_id
+        return self
+
+    def __exit__(self, type, value, tb):
+        print "releasing GPU lock %d" % self.device_id
+        if self.device_id >= 0:
+            free_lock(self.device_id)
+
 # Get ID's of NVIDIA boards. Should do this through a CUDA call, but this is
 # a quick and dirty way that works for now:
 def board_ids():
@@ -71,8 +84,10 @@ def obtain_lock_id(pid = None, num_retries=10):
     process pid (by default the current python process) terminates.
     """
     id = -1
-    while id == -1 and num_retries > 0:
+    while num_retries > 0:
         id = obtain_lock_id_to_hog()
+        if id >= 0:
+            break
         num_retries -= 1
         print "No card available, trying again..."
         time.sleep(2)
